@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/maps">
+        <file>Core/Map/maps/level1.map</file>
+        <file>Entities/Items/images/coin.png</file>
+    </qresource>
+</RCC>

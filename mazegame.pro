@@ -12,6 +12,8 @@ SOURCES += \
     Core/Map/mapmanager.cpp \
     Core/Map/maprenderer.cpp \
     Entities/Character/player.cpp \
+    Entities/Components/collidercomponent.cpp \
+    Entities/Items/coinitem.cpp \
     UI/MainWindow/mainwindow.cpp \
     main.cpp \
 
@@ -19,6 +21,9 @@ HEADERS += \
     Core/Map/mapmanager.h \
     Core/Map/maprenderer.h \
     Entities/Character/player.h \
+    Entities/Components/collidercomponent.h \
+    Entities/Items/coinitem.h \
+    Entities/Items/item.h \
     UI/MainWindow/mainwindow.h \
 
 FORMS += \

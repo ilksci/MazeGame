@@ -1,72 +1,101 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "Core/Map/maprenderer.h"
-#include "Core/Map/mapmanager.h"
 #include <QKeyEvent>
-#include <QPoint>
-#include <QWidget>
+#include <QDebug>
+#include <QFile>
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_scene(new QGraphicsScene(this))
+    , m_view(new QGraphicsView(m_scene, this))
 {
     ui->setupUi(this);
-    setFixedSize(1500,800);  // 主窗口大小
-    setStyleSheet("background:#333");//深灰色背景
+    setWindowTitle("迷宫冒险");
+    setFixedSize(1500, 800);
 
-    if(!MapManager::instance().loadMap(":/maps/Core/Map/maps/level1.map"))
-    {
-        qFatal("Failed to load map");//地图加载失败时终止
-        QCoreApplication::exit(1); // 确保程序终止
+    // 初始化视图
+    m_view->setFixedSize(1500, 800);
+    m_view->setRenderHint(QPainter::Antialiasing);
+    m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_view->setStyleSheet("background: #333;");
+
+    // 加载地图
+    if(!MapManager::instance().loadMap(":/maps/Core/Map/maps/level1.map")) {
+        qDebug() << "错误详情: " << QFile(":/maps/level1.map").errorString();//我不明白，为什么又加载失败了
+        qFatal("Failed to load map");
+        QCoreApplication::exit(1);
     }
 
+    // 初始化场景内容
+    initScene();
 
-    //创建地图渲染器并且居中显示
-    MapRenderer* renderer=new MapRenderer(this);
-    // 计算地图渲染器居中坐标
-    int rendererX = (width() - renderer->width()) / 2;
-    int rendererY = (height() - renderer->height()) / 2;
-    renderer->move(rendererX, rendererY); // 确保完全居中
-    // 调试输出
-    qDebug() << "地图渲染器尺寸:" << renderer->size();
-    qDebug() << "地图渲染器位置:" << renderer->pos();
+    // 配置玩家
+    const QSize mapSize = MapManager::instance().gridSize();
+    /*m_player->setPos(mapSize.width() * MapManager::GRID_SIZE / 2,
+                     mapSize.height() * MapManager::GRID_SIZE / 2);*/
+    if (!MapManager::instance().spawnPoints().isEmpty()) {
+        QPoint spawn = MapManager::instance().spawnPoints().first();
+        m_player->setPos(
+            spawn.x() * MapManager::GRID_SIZE,
+            spawn.y() * MapManager::GRID_SIZE
+            );
+    } else {
+        // 默认居中（安全回退）
+        m_player->setPos(
+            mapSize.width() * MapManager::GRID_SIZE / 2,
+            mapSize.height() * MapManager::GRID_SIZE / 2
+            );
+    }
+    m_player->setZValue(100); // 确保玩家在最上层
 
-    setAttribute(Qt::WA_TranslucentBackground);
+    // 游戏循环
+    m_gameTimer.start(16); // ~60FPS
+    connect(&m_gameTimer, &QTimer::timeout, this, &MainWindow::gameLoop);
+}
 
-    m_player=(new Player(renderer));//创建玩家
+    void MainWindow::initScene()
+    {
+        // 生成地图可视化
+        const QSize mapSize = MapManager::instance().gridSize();
+        for(int y = 0; y < mapSize.height(); ++y) {
+            for(int x = 0; x < mapSize.width(); ++x) {
+                QGraphicsRectItem* tile = new QGraphicsRectItem(
+                    x * MapManager::GRID_SIZE,
+                    y * MapManager::GRID_SIZE,
+                    MapManager::GRID_SIZE,
+                    MapManager::GRID_SIZE
+                    );
+                tile->setBrush(MapManager::instance().isWalkable(x, y)
+                                   ? Qt::white : Qt::darkGray);
+                m_scene->addItem(tile);
+            }
+        }
 
-    // MainWindow构造函数中的玩家位置计算部分
-    const QSize mapGridSize = MapManager::instance().gridSize();
-    const int cellSize = 50; // 确保与MapRenderer和Player中的值一致
-    const QPoint centerGrid(
-        mapGridSize.width() / 2,
-        mapGridSize.height() / 2
-        );
-    // 计算玩家在renderer中的相对位置（直接使用网格坐标转换）
-    QPoint playerPos(
-        centerGrid.x() * cellSize - m_player->width()/2,
-        centerGrid.y() * cellSize - m_player->height()/2
-        );
+        // 设置场景到MapManager并生成金币
+        MapManager::instance().setScene(m_scene); // 使用已有的m_scene
+        MapManager::instance().generateCoins(50);
 
-    m_player->QWidget::move(playerPos.x(),playerPos.y()); // 直接使用QPoint
-    m_player->updateGeometry();
+        // 创建玩家
+        m_player = new Player();
+        m_scene->addItem(m_player);
 
-    // 调试输出
-    qDebug() << "地图渲染器位置:" << renderer->pos()
-             << "玩家初始位置:" << m_player->pos();
+        // 居中视图
+        centerView();
+    }
 
-    m_player->raise();//强制置顶玩家
-
-    setAutoFillBackground(false);
-    connect(m_player, &Player::posChanged, [this](){update();});
-
-    //游戏循环（60FPS）
-    m_gameTimer.start(16);
-    connect(&m_gameTimer,&QTimer::timeout,this,&MainWindow::gameLoop);
+void MainWindow::centerView()
+{
+    const QRectF sceneRect = m_scene->itemsBoundingRect();
+    m_view->fitInView(sceneRect, Qt::KeepAspectRatio);
+    m_view->centerOn(sceneRect.center());
 }
 
 void MainWindow::gameLoop()
 {
-    update();//触发重绘
+    // 处理动画和碰撞检测
+    m_view->viewport()->update();
 }
 
 MainWindow::~MainWindow()
@@ -76,11 +105,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    switch(event->key())
-    {
-    case Qt::Key_W:m_player->move(0,-1);break;
-    case Qt::Key_S:m_player->move(0,1);break;
-    case Qt::Key_A:m_player->move(-1,0);break;
-    case Qt::Key_D:m_player->move(1,0);break;
+    switch(event->key()) {
+    case Qt::Key_W: m_player->move(0, -1); break;
+    case Qt::Key_S: m_player->move(0, 1); break;
+    case Qt::Key_A: m_player->move(-1, 0); break;
+    case Qt::Key_D: m_player->move(1, 0); break;
     }
+    QMainWindow::keyPressEvent(event);
 }

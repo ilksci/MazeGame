@@ -1,29 +1,43 @@
-#ifndef PLAYER_H
-#define PLAYER_H
-
-#include <QWidget>
+#pragma once
+#include <QGraphicsObject>
 #include <QPropertyAnimation>
-#include "Core/Map/mapmanager.h"
+//#include "Core/Map/mapmanager.h"
+#include "Entities/Components/collidercomponent.h"
 
-class Player : public QWidget {
+class Player : public QGraphicsObject {
     Q_OBJECT
 public:
-    explicit Player(QWidget *parent = nullptr);
+    explicit Player(QGraphicsItem *parent = nullptr);
+    ~Player();
+
+    //动画控制参数
+    static constexpr int ANIM_DURATION=120;
+    static constexpr qreal ANIM_STEP=0.016;
+    Q_PROPERTY(qreal progress READ progress WRITE steProgress) //不要乱删代码，会前功尽弃；捡回来了动画代码
+    qreal progress() const {return m_progress;}
+    void setProgress(qreal p);
+    //图形项接口
+    QRectF boundingRect() const override;
+    void paint(QPainter *painter,
+               const QStyleOptionGraphicsItem *option,
+               QWidget *widget) override;
+
+    //移动控制
     void move(int dx, int dy);
-    void paintEvent(QPaintEvent *event);
-
-private:
+    void addGold(int amount);
+    void updateCollision();
     bool checkCollision(const QPoint& newPos) const;
-    QPropertyAnimation *anim;
-    QPoint m_oldPos;
-
-    static constexpr int DISPLAY_SIZE = 30;   // 显示尺寸
-    static constexpr int COLLISION_SIZE = 30; // 碰撞体积
-    static constexpr int GRID_SIZE = 50;      // 网格尺寸
-    static constexpr int MOVE_STEP = MapManager::GRID_SIZE / 2; // 12像素/步
 
 signals:
-    void posChanged();
-};
+    void goldChanged(int newAmount);
 
-#endif // PLAYER_H
+private:
+    QPropertyAnimation* m_anim;    //移动动画
+    qreal m_progress=0.0;
+    ColliderComponent* m_collider; //碰撞组件
+    int m_gold = 0;               //金币数量
+    bool m_isMoving=false;
+    static constexpr int GRID_SIZE = 25; //网格尺寸
+
+    QPointF m_oldPos;
+};
